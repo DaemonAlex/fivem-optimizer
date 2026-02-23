@@ -7,3 +7,8 @@ __pycache__/
 *.log
 python-embed/
 python-embed.zip
+
+# Claude Code
+.claude/
+.agents/
+CLAUDE.md
