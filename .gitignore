@@ -1,0 +1,9 @@
+node_modules/
+build/
+dist/
+__pycache__/
+*.pyc
+.env
+*.log
+python-embed/
+python-embed.zip

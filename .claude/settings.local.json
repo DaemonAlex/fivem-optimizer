@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(cd:*)",
+      "Bash(cd /d/codingprojects/optimiser && npm install 2>&1)",
+      "Bash(head:*)",
+      "Bash(where python3 2>/dev/null || where py 2>/dev/null || which python 2>/dev/null)",
+      "Bash(/c/Python311/python.exe:*)",
+      "WebFetch(domain:skills.sh)",
+      "Bash(cd /d/codingprojects/optimiser && npx -y skillsadd obra/superpowers 2>&1)",
+      "Bash(cd /d/codingprojects/optimiser && npx -y skillsadd anthropics/skills 2>&1)",
+      "Bash(cd /d/codingprojects/optimiser && npx -y skillsadd wshobson/agents 2>&1)",
+      "Bash(cd /d/codingprojects/optimiser && npx -y skillsadd vercel-labs/agent-skills 2>&1)",
+      "Bash(cd /d/codingprojects/optimiser && npx vite build 2>&1)",
+      "Bash(echo no python found:*)",
+      "Bash(python3:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebSearch",
+      "WebFetch(domain:forum.cfx.re)",
+      "WebFetch(domain:gtamods.com)",
+      "WebFetch(domain:openiv.com)",
+      "WebFetch(domain:www.modding-forum.com)",
+      "WebFetch(domain:dekurwinator-mods.bitrix24.site)",
+      "WebFetch(domain:zenhax.com)",
+      "WebFetch(domain:docs.gta.clothing)",
+      "WebFetch(domain:valdarixgames.medium.com)",
+      "Bash(cd D:/codingprojects/optimiser && node --check src/main/main.js 2>&1)",
+      "Bash(cd D:/codingprojects/optimiser && npx vite build 2>&1)",
+      "Bash(cd D:/codingprojects/optimiser && node scripts/generate-icon.js 2>&1)",
+      "WebFetch(domain:v6.vite.dev)",
+      "Bash(tail:*)",
+      "Bash(grep fix available:*)",
+      "Bash(cd /d/codingprojects/optimiser && npx electron --version 2>&1)",
+      "Bash(cd /d/codingprojects/optimiser && npx electron-builder --version 2>&1)",
+      "Bash(C:/Python311/python.exe:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth:*)"
+    ]
+  }
+}
