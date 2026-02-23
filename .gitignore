@@ -12,3 +12,4 @@ python-embed.zip
 .claude/
 .agents/
 CLAUDE.md
+skills-lock.json
