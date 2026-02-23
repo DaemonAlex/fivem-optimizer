@@ -2,6 +2,8 @@
 
 Windows desktop tool that scans FiveM streaming folders to identify and fix optimization issues in game assets (`.ytd`, `.yft`, `.ydr`, `.ybn`, `.ymap`, `.ytyp`).
 
+<img width="1194" height="793" alt="{A651BFAC-B1A2-44BB-94D7-080D2CF38D37}" src="https://github.com/user-attachments/assets/801f3e64-57fa-41a5-9ef4-61225370b2e6" />
+
 ![Electron](https://img.shields.io/badge/Electron-28-blue) ![React](https://img.shields.io/badge/React-18-blue) ![Python](https://img.shields.io/badge/Python-3.10+-green) ![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey)
 
 ## Features
