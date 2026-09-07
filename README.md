@@ -154,6 +154,15 @@ and the command-line tool.
     src/renderer/           React UI
     scripts/                download-python.js, download-texconv.js
 
+## Credits
+
+- Built by DaemonAlex (Stor) for the Del Perro Sands server, with Claude Code (Anthropic) doing the engine rewrite,
+  the audio merger and the tests.
+- RSC7 page-flag maths, texture dictionary layout and the `.rel` container layout follow CodeWalker by dexyfex.
+- Resampling through ImageMagick, or texconv from Microsoft DirectXTex on Windows.
+- The addon audio bank cap and the merged-pack workaround come from the FiveM community
+  (citizenfx/fivem issue 2515 and the Cfx.re forum).
+
 ## License
 
 MIT
