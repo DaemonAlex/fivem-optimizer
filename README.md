@@ -87,6 +87,26 @@ and every one that was kept, with the reason.
 
 Copy it from the backup folder over the live file and restart. The backup keeps the resource's relative path.
 
+## Server tool: audiomerge
+
+FiveM stops registering addon audio after roughly 190 banks; everything declared past that is silent
+([citizenfx/fivem#2515](https://github.com/citizenfx/fivem/issues/2515)). A pack that declares one
+game-data, one sound-data and one wave-pack file per car spends three slots per car. `audiomerge` folds a
+whole resource into one of each:
+
+    python3 /opt/fivem/tools/ytdshrink/audiomerge.py <resource> --out <new folder> --name gbaudio
+
+It reads the source `fxmanifest.lua`, merges every declared `.dat151.rel`, `.dat54.rel` and `.dat10.rel`
+(`relmerge.py`: the container format is documented there), copies every `.awc` into `sfx/dlc_<name>/`,
+rewrites the wave references to that folder, and writes a manifest with one `data_file` per type. The
+source is not modified; the output folder must not exist. `MERGE-REPORT.txt` in the output lists the
+registrations before and after, exact duplicates dropped, and conflicting duplicates (same sound name,
+different data: the first source wins). Swap the merged folder in under the original resource name so
+nothing that depends on the name changes, then restart.
+
+Verified on a live server: a Gabz audio pack went from 84 registrations per type to 1, an engine-swap
+library from 182 to 1, and the cars that had gone silent got their sound back.
+
 ## Desktop app (Windows)
 
 Download the installer from Releases. Python and texconv are bundled.
@@ -112,7 +132,7 @@ Download the installer from Releases. Python and texconv are bundled.
     FIVEM_OPTIMIZER_FIXTURES=/path/to/fixtures python3 -m pytest python/tests -q
 
 The fixture folder needs a real vehicle `.ytd` named `fer49p2025.ytd` and a small stock one named `formula.ytd`
-(see `python/tests/README.md`). Tests that need fixtures skip when the variable is unset. 51 tests cover the RSC7
+(see `python/tests/README.md`). Tests that need fixtures skip when the variable is unset. 62 tests cover the RSC7
 container maths, page packing, texture parsing, mip dropping, resampling, the optimizer entry point, the analyzer
 and the command-line tool.
 
@@ -125,6 +145,8 @@ and the command-line tool.
       converter.py          ImageMagick / texconv driver
       optimize_textures.py  plan + execute (used by the app and by ytdshrink)
       ytdshrink.py          command-line tool
+      relmerge.py           audio .rel container parse / merge / write
+      audiomerge.py         fold an audio resource into one registration per data type
       analyze.py            folder scan for the app
       analyzers/            per-type analyzers (ytd_analyzer is header-accurate; the rest are heuristics)
       tests/                pytest suite
