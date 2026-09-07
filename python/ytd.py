@@ -201,13 +201,15 @@ def parse(virtual, physical=None):
 UNCOMPRESSED = {21, 22, 32}   # A8R8G8B8, X8R8G8B8, A8B8G8R8: 4 bytes per pixel, 4-8x the memory of DXT
 
 
-def shrink(d, target, skip=None, converter=None, recompress=False):
+def shrink(d, target, skip=None, converter=None, recompress=False, keep_mipless=True):
     """
     Bring every texture down to max(width, height) <= target.
     Mip levels are dropped first (exact, no image processing). A texture that has no mip chain to
     promote is resampled through `converter` when one is given, otherwise it is skipped.
     With `recompress`, 32-bit uncompressed textures of 16 px or more are also re-encoded as DXT at
-    their current size (DXT5 when they carry alpha, DXT1 otherwise), with a full mip chain.
+    their current size (DXT5 when they carry alpha, DXT1 otherwise).
+    With `keep_mipless` (default), a texture that shipped with a single level stays single-level after
+    resampling or recompression: generated mip chains on dirt, decal and normal overlays haze at distance.
     Returns a report dict.
     """
     report = {"resized": 0, "unchanged": 0, "skipped": [], "details": []}
@@ -222,7 +224,8 @@ def shrink(d, target, skip=None, converter=None, recompress=False):
                     and not (skip and skip(t)) and converter.supports(t.format):
                 before = (t.width, t.height, t.levels, t.format)
                 try:
-                    w, h, levels, data, fmt = converter.resize(t.mip_bytes(0), t.width, t.height, t.format, max(t.width, t.height))
+                    w, h, levels, data, fmt = converter.resize(t.mip_bytes(0), t.width, t.height, t.format, max(t.width, t.height),
+                                                               levels=1 if (keep_mipless and t.levels == 1) else None)
                 except Exception as e:
                     skipped(t, f"{converter.name}: {e}")
                     continue
@@ -257,7 +260,8 @@ def shrink(d, target, skip=None, converter=None, recompress=False):
         method = "mipdrop"
         if max(t.width, t.height) > target:
             try:
-                w, h, levels, data, fmt = converter.resize(t.mip_bytes(0), t.width, t.height, t.format, target)
+                w, h, levels, data, fmt = converter.resize(t.mip_bytes(0), t.width, t.height, t.format, target,
+                                                           levels=1 if (keep_mipless and before[2] == 1) else None)
             except Exception as e:  # converter missing a format, or failed
                 skipped(t, f"{converter.name}: {e}")
                 continue

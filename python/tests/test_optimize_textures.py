@@ -72,6 +72,7 @@ def test_execute_rewrites_file_with_backup_and_reports_memory(folder, tmp_path):
     assert len(d.textures) == 51
     assert max(max(t.width, t.height) for t in d.textures if not t.name.startswith("script_rt")) <= 1024
     assert f.physical_size < 0.6 * 86 * MIB
+    assert {t.name: t.levels for t in d.textures}["ff"] == 1            # mipless stays mipless
     per = {r["file"]: r for r in res["results"]}
     assert per["fer49p2025.ytd"]["memory_before_mib"] == 86.0
     assert per["fer49p2025.ytd"]["memory_after_mib"] == round(f.physical_size / MIB, 1)

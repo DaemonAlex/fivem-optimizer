@@ -86,7 +86,7 @@ def projected_sizes(d, target, skip, have_converter, recompress=True):
         if longest <= target and recompress and have_converter and t.format_code in ytd.UNCOMPRESSED \
                 and min(t.width, t.height) >= 16 and not skip(t) and have_converter.supports(t.format):
             out = converter_mod.output_format(t.format)
-            size = ytd.chain_size(t.width, t.height, out, converter_mod.mip_count(t.width, t.height))
+            size = ytd.chain_size(t.width, t.height, out, 1 if t.levels == 1 else converter_mod.mip_count(t.width, t.height))
             row.update(method="recompress", to=f"{t.width}x{t.height} {out}")
         elif longest > target and not skip(t) and t.known_format:
             drop, w, h = 0, t.width, t.height
@@ -98,7 +98,7 @@ def projected_sizes(d, target, skip, have_converter, recompress=True):
             elif have_converter and have_converter.supports(t.format):
                 nw, nh = converter_mod.fit(t.width, t.height, target)
                 out = converter_mod.output_format(t.format)
-                size = ytd.chain_size(nw, nh, out, converter_mod.mip_count(nw, nh))
+                size = ytd.chain_size(nw, nh, out, 1 if t.levels == 1 else converter_mod.mip_count(nw, nh))
                 row.update(method="resample", to=f"{nw}x{nh}" + (f" {out}" if out != t.format else ""))
             else:
                 row.update(method="needs converter", to=None)

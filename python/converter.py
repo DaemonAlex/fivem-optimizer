@@ -72,10 +72,12 @@ class Converter:
             argv += ["(", "+clone", "-resize", f"{lw}x{lh}!", "-write", os.path.join(out_dir, f"level{i}.dds"), "+delete", ")"]
         return argv + ["null:"]
 
-    def resize(self, mip0, width, height, fmt, target):
-        """-> (new width, new height, levels, full mip chain bytes, output format) in the same format family."""
+    def resize(self, mip0, width, height, fmt, target, levels=None):
+        """-> (new width, new height, levels, mip chain bytes, output format) in the same format family.
+        `levels` defaults to a full chain; pass 1 to keep a texture mipless (dirt, decal and normal overlays
+        that shipped without mips haze at distance when a chain is generated for them)."""
         new_w, new_h = fit(width, height, target)
-        levels = mip_count(new_w, new_h)
+        levels = levels or mip_count(new_w, new_h)
         with tempfile.TemporaryDirectory(prefix="fivem-opt-") as tmp:
             in_path = os.path.join(tmp, "in.dds")
             with open(in_path, "wb") as fh:

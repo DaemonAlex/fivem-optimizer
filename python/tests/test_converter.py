@@ -51,6 +51,8 @@ def test_magick_resizes_a_real_no_mip_texture_and_keeps_format():
     w, h, levels, data, fmt = c.resize(t.mip_bytes(0), t.width, t.height, t.format, 1024)
     assert (w, h, levels, fmt) == (1024, 680, 11, "DXT5")
     assert len(data) == ytd.chain_size(1024, 680, "DXT5", 11)
+    w, h, levels, data, fmt = c.resize(t.mip_bytes(0), t.width, t.height, t.format, 1024, levels=1)
+    assert levels == 1 and len(data) == ytd.mip_size(1024, 680, "DXT5")
 
 
 @needs_magick
@@ -62,7 +64,11 @@ def test_shrink_with_converter_reaches_target_on_every_texture():
     assert report["resized"] == 11
     assert all(max(t.width, t.height) <= 1024 for t in d.textures)
     by = d.by_name()
-    assert (by["ff"].width, by["ff"].height, by["ff"].levels, by["ff"].format) == (1024, 680, 11, "DXT5")
+    # ff shipped without a mip chain: it is resized but stays mipless (dirt/decal/normal overlays haze at distance otherwise)
+    assert (by["ff"].width, by["ff"].height, by["ff"].levels, by["ff"].format) == (1024, 680, 1, "DXT5")
+    d3 = ytd.parse(rsc7.read(fixture("fer49p2025.ytd")).virtual, rsc7.read(fixture("fer49p2025.ytd")).physical)
+    ytd.shrink(d3, 1024, skip=lambda t: t.name.startswith("script_rt"), converter=converter.find(), keep_mipless=False)
+    assert d3.by_name()["ff"].levels == 11
     assert by["ff"].stride == 1024
     v, p, pflags = ytd.serialize(d)
     data = sum(len(t.data) for t in d.textures)
@@ -90,12 +96,12 @@ def test_shrink_converts_uncompressed_and_updates_format():
     d = ytd.parse(f.virtual, f.physical)
     report = ytd.shrink(d, 1024, converter=converter.find())
     t = d.by_name()["servicevan_sign_2"]
-    assert (t.width, t.format, t.levels, t.stride) == (1024, "DXT5", 11, 1024)
+    assert (t.width, t.format, t.levels, t.stride) == (1024, "DXT5", 1, 1024)   # shipped mipless, stays mipless
     assert report["skipped"] == []
     v, p, pflags = ytd.serialize(d)
     assert rsc7.flags_to_size(pflags) < 20 * 1024 * 1024
     back = ytd.parse(v, p).by_name()["servicevan_sign_2"]        # the written record must carry the new format
-    assert (back.format, back.levels, back.width) == ("DXT5", 11, 1024)
+    assert (back.format, back.levels, back.width) == ("DXT5", 1, 1024)
     assert back.data == t.data
 
 
@@ -109,7 +115,7 @@ def test_recompress_converts_small_uncompressed_textures_too():
     after = [t for t in d.textures if t.format.startswith(("A8R8", "X8R8", "A8B8"))]
     assert all(max(t.width, t.height) < 16 for t in after)        # only tiny ones (under one block row) are left
     env = d.by_name()["env"]
-    assert (env.width, env.height, env.format) == (512, 512, "DXT5") and env.levels >= 9
+    assert (env.width, env.height, env.format) == (512, 512, "DXT5") and env.levels == 10   # shipped with 10 mips, keeps a chain
     assert any(x.get("method") == "recompress" for x in report["details"])
     v, p, pflags = ytd.serialize(d)
     assert rsc7.flags_to_size(pflags) < 8 * 1024 * 1024
