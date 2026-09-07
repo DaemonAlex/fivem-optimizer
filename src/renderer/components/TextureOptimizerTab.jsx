@@ -119,6 +119,12 @@ export default function TextureOptimizerTab({ folderPath, formatBytes, onShowInE
         backup_folder: texBackupFolder,
         target_resolution: texPlan?.target_resolution || 1024,
       };
+      if (!texBackupFolder) {
+        setOptResults({ status: 'no_backup', files_processed: 0, files_succeeded: 0, files_failed: 0, files_skipped: 0,
+          results: [], errors: [], message: 'Pick a backup folder first. Originals are always copied there before a file is changed.' });
+        setOptimizing(false);
+        return;
+      }
       const result = await window.electronAPI.optimizeTextures(payload);
       setOptResults(result);
     } catch (e) {
@@ -181,8 +187,8 @@ export default function TextureOptimizerTab({ folderPath, formatBytes, onShowInE
           </div>
           <h3>Texture Optimization</h3>
           <p className="opt-tex-start-desc">
-            Scan all .ytd files to identify oversized textures that can be safely resized.
-            This analysis checks texture dimensions, formats, and types to create an optimization plan.
+            Scan every .ytd file: real texture names, sizes and formats, and the memory the game
+            allocates for each file. Then shrink the oversized ones with a backup and a log.
           </p>
           <button className="opt-tex-analyze-btn" onClick={handleAnalyzeTextures}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
@@ -251,13 +257,30 @@ export default function TextureOptimizerTab({ folderPath, formatBytes, onShowInE
                 </div>
                 <div className="opt-tex-stat">
                   <span className="opt-tex-stat-value">{formatBytes(texPlan.total_size)}</span>
-                  <span className="opt-tex-stat-label">Total Size</span>
+                  <span className="opt-tex-stat-label">In-Game Memory Now</span>
                 </div>
                 <div className="opt-tex-stat opt-tex-stat-accent">
                   <span className="opt-tex-stat-value">{formatBytes(texPlan.estimated_savings)}</span>
-                  <span className="opt-tex-stat-label">Est. Savings</span>
+                  <span className="opt-tex-stat-label">Memory Saved After</span>
                 </div>
               </div>
+
+              <div className="opt-tex-info-banner">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
+                <div>
+                  Memory figures are what the game allocates for each file (the number FXServer prints at boot), not the size on disk.
+                  {' '}{texPlan.converter_note}
+                </div>
+              </div>
+
+              {texPlan.optimizable_files === 0 && (
+                <div className="opt-tex-info-banner">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
+                  <div>
+                    <strong>Nothing to optimize.</strong> Every file was skipped; the reason is listed on each row.
+                  </div>
+                </div>
+              )}
 
               {/* Optimization results banner */}
               {optResults && (
@@ -271,7 +294,7 @@ export default function TextureOptimizerTab({ folderPath, formatBytes, onShowInE
                       )}
                     </svg>
                     <div className="opt-tex-results-text">
-                      <strong>Optimization Complete</strong>
+                      <strong>{optResults.status === 'completed' ? 'Optimization Complete' : optResults.status === 'no_backup' ? 'Backup Folder Needed' : 'Optimization Stopped'}</strong>
                       <div className="opt-tex-result-stats">
                         <span className="opt-tex-result-stat opt-tex-result-success">{optResults.files_succeeded} optimized</span>
                         {optResults.files_skipped > 0 && (
@@ -281,6 +304,23 @@ export default function TextureOptimizerTab({ folderPath, formatBytes, onShowInE
                           <span className="opt-tex-result-stat opt-tex-result-error">{optResults.files_failed} failed</span>
                         )}
                       </div>
+                      {optResults.message && (
+                        <div className="opt-tex-result-message">{optResults.message}</div>
+                      )}
+                      {optResults.results && optResults.results.length > 0 && (
+                        <div className="opt-tex-result-files">
+                          {optResults.results.map((r) => (
+                            <div key={r.file} className={`opt-tex-result-file opt-tex-result-${r.status}`}>
+                              <span className="opt-tex-result-file-status">{r.status}</span>
+                              <span className="opt-tex-result-file-name" title={r.file}>{r.file}</span>
+                              <span className="opt-tex-result-file-reason">{r.reason}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {optResults.log_path && (
+                        <div className="opt-tex-result-log">Full log: {optResults.log_path}</div>
+                      )}
                       {optResults.errors.length > 0 && (
                         <div className="opt-tex-result-errors">
                           {optResults.errors.slice(0, 5).map((err, i) => (
@@ -384,7 +424,8 @@ export default function TextureOptimizerTab({ folderPath, formatBytes, onShowInE
                     <div className="opt-dup-toolbar-right">
                       <button
                         className="opt-tex-execute-btn"
-                        disabled={texSelected.size === 0}
+                        disabled={texSelected.size === 0 || !texBackupFolder}
+                        title={!texBackupFolder ? 'Set a backup folder first' : ''}
                         onClick={() => setShowConfirmDialog(true)}
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z" /><polyline points="13 2 13 9 20 9" /><path d="M9 15l2 2 4-4" /></svg>
@@ -396,8 +437,10 @@ export default function TextureOptimizerTab({ folderPath, formatBytes, onShowInE
                   <div className="opt-tex-info-banner">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
                     <div>
-                      In-place mipmap replacement &mdash; downsizes textures to {texPlan.target_resolution}px by
-                      copying lower mip levels. Files stay the same size (freed space is zeroed).
+                      Textures over {texPlan.target_resolution}px are shrunk by dropping their top mip levels (exact, same
+                      compression). Textures that ship without mipmaps are resampled through the converter into a full chain.
+                      Each file is rebuilt with correct memory headers and re-read to verify. Originals go to the backup folder
+                      first, with a log of every change.
                     </div>
                   </div>
                 </>
@@ -430,8 +473,8 @@ export default function TextureOptimizerTab({ folderPath, formatBytes, onShowInE
                   <span className="opt-col-check"></span>
                   <span className="opt-col-name">File</span>
                   <span className="opt-col-dim">Max Dimension</span>
-                  <span className="opt-col-size">Size</span>
-                  <span className="opt-col-savings">Est. Savings</span>
+                  <span className="opt-col-size">Memory Now</span>
+                  <span className="opt-col-savings">After / Why Skipped</span>
                   <span className="opt-col-action"></span>
                 </div>
                 {texPlan.files.map((file) => {
@@ -460,13 +503,13 @@ export default function TextureOptimizerTab({ folderPath, formatBytes, onShowInE
                       <span className="opt-col-dim">
                         {file.max_dimension > 0 ? `${file.max_dimension}px` : '?'}
                       </span>
-                      <span className="opt-col-size opt-file-size">
-                        {formatBytes(file.size)}
+                      <span className="opt-col-size opt-file-size" title={`${formatBytes(file.disk_size || 0)} on disk`}>
+                        {file.memory_mib > 0 ? `${file.memory_mib} MiB` : '?'}
                       </span>
                       <span className="opt-col-savings">
                         {isOptimizable ? (
-                          <span className="opt-tex-savings">
-                            ~{formatBytes(file.estimated_savings)}
+                          <span className="opt-tex-savings" title={(file.oversized || []).map(t => `${t.name} ${t.size} ${t.method || ''}`).join('\n')}>
+                            &rarr; {file.memory_after_mib} MiB
                             <span className="opt-tex-savings-pct">-{file.estimated_savings_pct}%</span>
                           </span>
                         ) : (

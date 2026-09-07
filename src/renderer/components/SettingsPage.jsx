@@ -6,7 +6,8 @@ const SETTING_GROUPS = [
     settings: [
       { key: 'maxTextureResolution', label: 'Max texture resolution (px)', type: 'number', min: 256, max: 8192 },
       { key: 'recommendedMaxResolution', label: 'Recommended max resolution (px)', type: 'number', min: 128, max: 4096 },
-      { key: 'maxYtdSizeMB', label: 'Max YTD file size (MB)', type: 'number', min: 1, max: 16 },
+      { key: 'maxYtdMemoryMiB', label: 'YTD in-game memory: critical above (MiB)', type: 'number', min: 1, max: 512 },
+      { key: 'warnYtdMemoryMiB', label: 'YTD in-game memory: warn above (MiB)', type: 'number', min: 1, max: 512 },
     ],
   },
   {
@@ -37,7 +38,7 @@ const SETTING_GROUPS = [
   {
     title: 'General',
     settings: [
-      { key: 'maxSingleFileMB', label: 'FiveM streaming limit (MB)', type: 'number', min: 1, max: 16 },
+      { key: 'maxSingleFileMB', label: 'Large file on disk: critical above (MB)', type: 'number', min: 1, max: 1024 },
       { key: 'largeFileWarningMB', label: 'Large file warning threshold (MB)', type: 'number', min: 1, max: 16 },
       { key: 'minLodLevels', label: 'Minimum required LOD levels', type: 'number', min: 1, max: 5 },
       { key: 'recommendedLodLevels', label: 'Recommended LOD levels', type: 'number', min: 2, max: 5 },
@@ -47,7 +48,6 @@ const SETTING_GROUPS = [
     title: 'Optimizer',
     settings: [
       { key: 'optimizerTargetResolution', label: 'Default target resolution (px)', type: 'number', min: 128, max: 4096 },
-      { key: 'optimizerMinResizeSize', label: 'Min file size to optimize (bytes)', type: 'number', min: 0, max: 16777216 },
     ],
   },
 ];

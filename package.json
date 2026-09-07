@@ -1,6 +1,6 @@
 {
   "name": "fivem-optimizer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "FiveM Streaming Asset Optimizer - Scan and fix optimization issues for game assets",
   "main": "src/main/main.js",
   "author": "FiveM Optimizer",
@@ -8,10 +8,12 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:renderer\" \"wait-on http://localhost:5173 && electron .\"",
     "dev:renderer": "vite",
-    "build": "node scripts/download-python.js && vite build && electron-builder",
+    "build": "node scripts/download-python.js && node scripts/download-texconv.js && vite build && electron-builder",
     "build:renderer": "vite build",
     "build:installer": "electron-builder",
     "download-python": "node scripts/download-python.js",
+    "download-texconv": "node scripts/download-texconv.js",
+    "test:python": "python -m pytest python/tests -q",
     "start": "electron ."
   },
   "dependencies": {

@@ -13,3 +13,6 @@ python-embed.zip
 .agents/
 CLAUDE.md
 skills-lock.json
+python/tools/
+__pycache__/
+.pytest_cache/

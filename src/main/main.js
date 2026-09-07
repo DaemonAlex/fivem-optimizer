@@ -13,7 +13,8 @@ const store = new Store({
       // Texture limits (community-validated)
       maxTextureResolution: 4096,
       recommendedMaxResolution: 2048,
-      maxYtdSizeMB: 14,
+      maxYtdMemoryMiB: 32,
+      warnYtdMemoryMiB: 16,
       // Vehicle/fragment limits
       maxVehiclePolys: 150000,
       recommendedMaxVehiclePolys: 70000,
@@ -560,6 +561,8 @@ ipcMain.handle('optimizer:execute', async (_event, payload) => {
     optimizerProcess.kill();
     optimizerProcess = null;
   }
+
+  payload = { ...payload, settings: store.get('settings') };
 
   return new Promise((resolve, reject) => {
     optimizerProcess = spawn(pythonExe, [scriptPath, '--execute', JSON.stringify(payload)], {

@@ -16,8 +16,8 @@ class GenericAnalyzer:
                 "file_type": ext,
                 "severity": "critical",
                 "category": "file_size",
-                "message": f"Extremely large file ({size_mb:.1f} MB)",
-                "recommendation": f"This file is {size_mb:.1f} MB which will cause streaming issues. Consider splitting or optimizing to stay under {self.max_size_mb} MB.",
+                "message": f"Very large file on disk ({size_mb:.1f} MB)",
+                "recommendation": f"Disk size is a hint only: stream files are compressed on disk and the game allocates what the file header says. Check FXServer's boot log for the real memory number.",
                 "details": {"size_mb": round(size_mb, 2)},
             })
         elif size_mb > self.warn_size_mb:
@@ -27,7 +27,7 @@ class GenericAnalyzer:
                 "severity": "warning",
                 "category": "file_size",
                 "message": f"Large file ({size_mb:.1f} MB)",
-                "recommendation": f"File is {size_mb:.1f} MB. Consider optimizing to improve streaming performance.",
+                "recommendation": "Disk size is a hint only; the boot log's 'uses N MiB' line is the real cost.",
                 "details": {"size_mb": round(size_mb, 2)},
             })
 

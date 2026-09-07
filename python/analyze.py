@@ -35,7 +35,8 @@ DEFAULT_SETTINGS = {
     # Texture limits (community-validated)
     "maxTextureResolution": 4096,       # 4K is common in community, 8K is hard GPU limit
     "recommendedMaxResolution": 2048,   # 2K is safe baseline for most assets
-    "maxYtdSizeMB": 14,                # Safe under 16MB FiveM streaming hard limit
+    "maxYtdMemoryMiB": 32,             # in-game memory a .ytd may allocate before it is flagged critical
+    "warnYtdMemoryMiB": 16,
     # Vehicle/fragment limits
     "maxVehiclePolys": 150000,          # Community standard L0 range: 100-150K
     "recommendedMaxVehiclePolys": 70000,# Good target for optimized vehicles
@@ -50,7 +51,7 @@ DEFAULT_SETTINGS = {
     "maxYbnSizeMB": 4,
     "maxBoundsDimension": 500,
     # General
-    "maxSingleFileMB": 16,             # FiveM HARD LIMIT - cannot stream above 16MB
+    "maxSingleFileMB": 16,             # on-disk size hint for model/collision/map files
     "largeFileWarningMB": 10,
     # LOD validation
     "minLodLevels": 2,                  # Minimum acceptable LOD chain
@@ -146,9 +147,10 @@ def analyze_single_file(filepath, ext, file_size, rel_path, settings, analyzers)
     hash_info = None
     dep_data = None
 
-    # Generic size checks (no I/O needed)
-    generic = analyzers['generic']
-    issues.extend(generic.analyze(filepath, rel_path, ext, file_size))
+    # Generic disk-size checks (no I/O needed). Texture dictionaries get a real memory check instead.
+    if ext != '.ytd':
+        generic = analyzers['generic']
+        issues.extend(generic.analyze(filepath, rel_path, ext, file_size))
 
     # Read the file once — shared between analyzer and hasher
     read_limit = ANALYSIS_READ_LIMITS.get(ext, 65536)

@@ -105,7 +105,7 @@ export default function ResultsDashboard({ results, onReset, folderPath, onOptim
           <h2>Analysis Results</h2>
           <p className="results-subtitle">
             {summary.total_files || 0} files scanned &middot; {summary.total_size ? formatBytes(summary.total_size) : '0 B'} total
-            {summary.vram_estimate > 0 && <> &middot; ~{formatBytes(summary.vram_estimate)} estimated VRAM</>}
+            {summary.vram_estimate > 0 && <> &middot; ~{formatBytes(summary.vram_estimate)} in-game memory (texture dictionaries)</>}
           </p>
         </div>
         <div className="results-actions">
@@ -146,7 +146,7 @@ export default function ResultsDashboard({ results, onReset, folderPath, onOptim
         </button>
         <div className="stat-card stat-memory" role="listitem">
           <span className="stat-count">{summary.total_size ? formatBytes(summary.total_size) : '—'}</span>
-          <span className="stat-label">Streaming Memory</span>
+          <span className="stat-label">Size on Disk</span>
         </div>
       </div>
 

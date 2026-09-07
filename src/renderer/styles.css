@@ -2025,3 +2025,15 @@ button.stat-card {
   .category-chips { gap: 6px; }
   .category-chip { padding: 5px 10px; font-size: 11px; }
 }
+
+/* Texture optimizer: per-file outcome list */
+.opt-tex-result-message { margin-top: 6px; font-size: 13px; }
+.opt-tex-result-files { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+.opt-tex-result-file { display: grid; grid-template-columns: 90px minmax(120px, 1fr) 2fr; gap: 8px; font-size: 12px; align-items: baseline; }
+.opt-tex-result-file-status { text-transform: uppercase; font-weight: 600; letter-spacing: 0.04em; }
+.opt-tex-result-optimized .opt-tex-result-file-status { color: var(--success); }
+.opt-tex-result-skipped .opt-tex-result-file-status { color: var(--text-muted, #9aa0a6); }
+.opt-tex-result-failed .opt-tex-result-file-status { color: var(--error, #f87171); }
+.opt-tex-result-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.opt-tex-result-file-reason { color: var(--text-muted, #9aa0a6); }
+.opt-tex-result-log { margin-top: 8px; font-size: 12px; color: var(--text-muted, #9aa0a6); word-break: break-all; }
