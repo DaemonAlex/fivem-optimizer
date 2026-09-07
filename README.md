@@ -33,8 +33,12 @@ Everything this tool reports is that number, read from the header. After shrinki
 4. Pixel data is repacked into RSC7 memory pages (a texture never straddles a page), each record's size word is
    updated, the header flags are recomputed, and the file is rewritten and re-read to verify.
 
+5. 32-bit uncompressed textures (A8R8G8B8 and friends, 4 bytes per pixel) are re-encoded as DXT5 or DXT1 with a
+   full mip chain even when they are already small enough. A 4096-square uncompressed sign is 64 MiB; as DXT5 with
+   mips at 1024 it is 1.3 MiB. `--keep-uncompressed` turns this off.
+
 Rules: a backup folder is required; `script_rt` and emissive/glow textures are never resized; nothing is ever
-upscaled; FXAP-encrypted (escrow) files are reported as unreadable, never guessed at.
+upscaled; FXAP-encrypted (escrow) files are reported as unreadable, never guessed at; empty dictionaries are fine.
 
 ## Server tool: ytdshrink
 
@@ -72,6 +76,7 @@ Options:
 | `--apply` | write changes (needs `--backup`) |
 | `--backup DIR` | where originals and `fivem-optimizer-log.txt` go; relative paths are kept |
 | `--keep-emissive` | also shrink emissive/glow textures |
+| `--keep-uncompressed` | leave 32-bit uncompressed textures as they are |
 | `--json` | machine-readable output |
 
 After applying, restart the server and read the boot log: the `uses N MiB` line for each file should show the new
@@ -107,7 +112,7 @@ Download the installer from Releases. Python and texconv are bundled.
     FIVEM_OPTIMIZER_FIXTURES=/path/to/fixtures python3 -m pytest python/tests -q
 
 The fixture folder needs a real vehicle `.ytd` named `fer49p2025.ytd` and a small stock one named `formula.ytd`
-(see `python/tests/README.md`). Tests that need fixtures skip when the variable is unset. 45 tests cover the RSC7
+(see `python/tests/README.md`). Tests that need fixtures skip when the variable is unset. 51 tests cover the RSC7
 container maths, page packing, texture parsing, mip dropping, resampling, the optimizer entry point, the analyzer
 and the command-line tool.
 

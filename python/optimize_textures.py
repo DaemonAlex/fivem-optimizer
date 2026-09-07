@@ -20,6 +20,7 @@ Rules
       the file is touched.
     * script_rt textures and emissive/glow textures are never resized (settings can relax this).
     * FXAP-encrypted (escrow) files cannot be opened and are reported as such.
+    * 32-bit uncompressed textures are re-encoded as DXT (4-8x smaller) unless optimizerRecompress is off.
     * Nothing is ever upscaled.
 """
 import json
@@ -75,24 +76,30 @@ def scan_ytd_files(folder):
     return found
 
 
-def projected_sizes(d, target, skip, have_converter):
+def projected_sizes(d, target, skip, have_converter, recompress=True):
     """Per-texture data sizes after a shrink, without touching pixels. Returns (sizes, plan rows)."""
     sizes, rows = [], []
     for t in d.textures:
         size = t.chain_size()
         longest = max(t.width, t.height)
         row = {"name": t.name, "size": f"{t.width}x{t.height}", "format": t.format, "mipmaps": t.levels}
-        if longest > target and not skip(t) and t.known_format:
+        if longest <= target and recompress and have_converter and t.format_code in ytd.UNCOMPRESSED \
+                and min(t.width, t.height) >= 16 and not skip(t) and have_converter.supports(t.format):
+            out = converter_mod.output_format(t.format)
+            size = ytd.chain_size(t.width, t.height, out, converter_mod.mip_count(t.width, t.height))
+            row.update(method="recompress", to=f"{t.width}x{t.height} {out}")
+        elif longest > target and not skip(t) and t.known_format:
             drop, w, h = 0, t.width, t.height
             while max(w, h) > target and drop < t.levels - 1:
                 w, h, drop = max(1, w >> 1), max(1, h >> 1), drop + 1
             if max(w, h) <= target:
                 size = ytd.chain_size(w, h, t.format_code, t.levels - drop)
                 row.update(method="mipdrop", to=f"{w}x{h}")
-            elif have_converter and t.format in converter_mod._TEXCONV_FORMAT:
+            elif have_converter and have_converter.supports(t.format):
                 nw, nh = converter_mod.fit(t.width, t.height, target)
-                size = ytd.chain_size(nw, nh, t.format_code, converter_mod.mip_count(nw, nh))
-                row.update(method="resample", to=f"{nw}x{nh}")
+                out = converter_mod.output_format(t.format)
+                size = ytd.chain_size(nw, nh, out, converter_mod.mip_count(nw, nh))
+                row.update(method="resample", to=f"{nw}x{nh}" + (f" {out}" if out != t.format else ""))
             else:
                 row.update(method="needs converter", to=None)
         elif longest > target:
@@ -102,7 +109,7 @@ def projected_sizes(d, target, skip, have_converter):
     return sizes, rows
 
 
-def plan_file(path, rel, disk_size, target, skip, conv):
+def plan_file(path, rel, disk_size, target, skip, conv, recompress=True):
     entry = {"path": path, "rel_path": rel, "disk_size": disk_size, "size": 0, "memory_mib": 0.0, "memory_after_mib": None,
              "texture_count": 0, "max_dimension": 0, "has_script_rt": False, "has_emissive": False,
              "should_optimize": False, "skip_reason": None, "estimated_savings": 0, "estimated_savings_pct": 0,
@@ -124,11 +131,11 @@ def plan_file(path, rel, disk_size, target, skip, conv):
     entry["max_dimension"] = max((max(t.width, t.height) for t in d.textures), default=0)
     entry["has_script_rt"] = any(is_script_rt(t.name) for t in d.textures)
     entry["has_emissive"] = any(is_emissive(t.name) for t in d.textures)
-    sizes, rows = projected_sizes(d, target, skip, conv is not None)
-    entry["oversized"] = [row for row in rows if max(map(int, row["size"].split("x"))) > target]
+    sizes, rows = projected_sizes(d, target, skip, conv, recompress)
+    entry["oversized"] = [row for row in rows if max(map(int, row["size"].split("x"))) > target or row.get("method") == "recompress"]
     entry["oversized"].sort(key=lambda row: -max(map(int, row["size"].split("x"))))
     entry["needs_converter"] = sum(1 for row in rows if row.get("method") == "needs converter")
-    doable = sum(1 for row in rows if row.get("method") in ("mipdrop", "resample"))
+    doable = sum(1 for row in rows if row.get("method") in ("mipdrop", "resample", "recompress"))
     if doable:
         flags, _ = rsc7.pack(sizes, align=ytd.DATA_ALIGN)
         after = rsc7.flags_to_size(flags)
@@ -139,7 +146,7 @@ def plan_file(path, rel, disk_size, target, skip, conv):
         if not entry["should_optimize"]:
             entry["skip_reason"] = "Shrinking would not reduce the memory the game allocates"
     elif not entry["oversized"]:
-        entry["skip_reason"] = f"All textures already {target}px or smaller"
+        entry["skip_reason"] = f"All textures already {target}px or smaller and block-compressed"
     elif entry["needs_converter"]:
         entry["skip_reason"] = (f"{entry['needs_converter']} oversized texture(s) have no mipmaps; resizing them needs a converter "
                                 f"(texconv.exe in the app's tools folder, or ImageMagick on PATH)")
@@ -152,6 +159,7 @@ def plan_file(path, rel, disk_size, target, skip, conv):
 def optimize_batch(folder, settings):
     target = int(settings.get("optimizerTargetResolution", 1024))
     skip = skip_rule(settings)
+    recompress = bool(settings.get("optimizerRecompress", True))
     conv = converter_mod.find()
     progress("Scanning for .ytd files...")
     files = scan_ytd_files(folder)
@@ -162,7 +170,7 @@ def optimize_batch(folder, settings):
     plan = []
     for i, (path, rel, disk) in enumerate(files):
         progress(f"{int((i + 1) / len(files) * 100)}%|{i + 1}/{len(files)}|Reading {os.path.basename(path)}")
-        plan.append(plan_file(path, rel, disk, target, skip, conv))
+        plan.append(plan_file(path, rel, disk, target, skip, conv, recompress))
     progress("Plan ready")
     return {
         "status": "ready",
@@ -191,11 +199,11 @@ def backup_file(abs_path, rel_path, backup_dir):
     return dest
 
 
-def optimize_file(abs_path, target, skip, conv):
+def optimize_file(abs_path, target, skip, conv, recompress=True):
     """Shrink one .ytd in place. Returns (memory_before, memory_after, report)."""
     r = rsc7.read(abs_path)
     d = ytd.parse(r.virtual, r.physical)
-    report = ytd.shrink(d, target, skip=skip, converter=conv)
+    report = ytd.shrink(d, target, skip=skip, converter=conv, recompress=recompress)
     if report["resized"] == 0:
         return r.physical_size, r.physical_size, report
     virtual, physical, pflags = ytd.serialize(d)
@@ -217,6 +225,7 @@ def execute_optimization(payload):
     target = int(payload.get("target_resolution", 1024))
     settings = payload.get("settings") or {}
     skip = skip_rule(settings)
+    recompress = bool(settings.get("optimizerRecompress", True))
     conv = converter_mod.find()
 
     out = {"status": "completed", "files_processed": 0, "files_succeeded": 0, "files_failed": 0, "files_skipped": 0,
@@ -263,7 +272,7 @@ def execute_optimization(payload):
         try:
             out["total_original_size"] += os.path.getsize(abs_path)
             result["backup"] = backup_file(abs_path, rel, backup_dir)
-            before, after, report = optimize_file(abs_path, target, skip, conv)
+            before, after, report = optimize_file(abs_path, target, skip, conv, recompress)
             result["memory_before_mib"] = round(before / MIB, 1)
             result["memory_after_mib"] = round(after / MIB, 1)
             result["textures_resized"] = report["resized"]

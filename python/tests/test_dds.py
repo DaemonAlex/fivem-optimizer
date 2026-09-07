@@ -33,3 +33,11 @@ def test_read_rejects_non_dds():
         assert False
     except ValueError:
         pass
+
+
+def test_uncompressed_bgra_roundtrip():
+    payload = bytes(range(256)) * 16   # 32x32 px * 4 bytes
+    blob = dds.write(32, 32, "A8R8G8B8", 1, payload)
+    w, h, fmt, levels, data = dds.read(blob)
+    assert (w, h, fmt, levels) == (32, 32, "A8R8G8B8", 1)
+    assert data == payload

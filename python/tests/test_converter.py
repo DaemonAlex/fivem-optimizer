@@ -69,3 +69,47 @@ def test_shrink_with_converter_reaches_target_on_every_texture():
     assert data <= rsc7.flags_to_size(pflags) <= data * 1.06 + 2 * 1024 * 1024
     assert rsc7.flags_to_size(pflags) < 0.5 * f.physical_size
     assert any(x.get("method") == "resample" for x in report["details"])
+
+
+@needs_magick
+def test_uncompressed_texture_is_resampled_and_compressed():
+    f = rsc7.read(fixture("servicevan.ytd"))
+    d = ytd.parse(f.virtual, f.physical)
+    t = d.by_name()["servicevan_sign_2"]           # 4096x4096 A8R8G8B8, no mips, 64 MiB
+    assert (t.format, t.levels) == ("A8R8G8B8", 1)
+    c = converter.find()
+    assert c.supports("A8R8G8B8")
+    w, h, levels, data, fmt = c.resize(t.mip_bytes(0), t.width, t.height, t.format, 1024)
+    assert (w, h, levels, fmt) == (1024, 1024, 11, "DXT5")
+    assert len(data) == ytd.chain_size(1024, 1024, "DXT5", 11)
+
+
+@needs_magick
+def test_shrink_converts_uncompressed_and_updates_format():
+    f = rsc7.read(fixture("servicevan.ytd"))
+    d = ytd.parse(f.virtual, f.physical)
+    report = ytd.shrink(d, 1024, converter=converter.find())
+    t = d.by_name()["servicevan_sign_2"]
+    assert (t.width, t.format, t.levels, t.stride) == (1024, "DXT5", 11, 1024)
+    assert report["skipped"] == []
+    v, p, pflags = ytd.serialize(d)
+    assert rsc7.flags_to_size(pflags) < 20 * 1024 * 1024
+    back = ytd.parse(v, p).by_name()["servicevan_sign_2"]        # the written record must carry the new format
+    assert (back.format, back.levels, back.width) == ("DXT5", 11, 1024)
+    assert back.data == t.data
+
+
+@needs_magick
+def test_recompress_converts_small_uncompressed_textures_too():
+    f = rsc7.read(fixture("servicevan.ytd"))
+    d = ytd.parse(f.virtual, f.physical)
+    before = sum(1 for t in d.textures if t.format.startswith(("A8R8", "X8R8", "A8B8")))
+    assert before >= 10
+    report = ytd.shrink(d, 1024, converter=converter.find(), recompress=True)
+    after = [t for t in d.textures if t.format.startswith(("A8R8", "X8R8", "A8B8"))]
+    assert all(max(t.width, t.height) < 16 for t in after)        # only tiny ones (under one block row) are left
+    env = d.by_name()["env"]
+    assert (env.width, env.height, env.format) == (512, 512, "DXT5") and env.levels >= 9
+    assert any(x.get("method") == "recompress" for x in report["details"])
+    v, p, pflags = ytd.serialize(d)
+    assert rsc7.flags_to_size(pflags) < 8 * 1024 * 1024

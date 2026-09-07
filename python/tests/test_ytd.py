@@ -112,3 +112,9 @@ def test_serialize_updates_record_size_field_after_shrink():
         assert field >> 12 & 0xFFFF == -(-len(t.data) // 4096), t.name
         assert field & 0xFFF == usage[t.name]
         assert field & 0xF0000000 == 0x20000000
+
+
+def test_empty_dictionary_parses_to_no_textures():
+    f = rsc7.read(fixture("polbufsx2.ytd"))
+    d = ytd.parse(f.virtual, f.physical)
+    assert d.textures == []

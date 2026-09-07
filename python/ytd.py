@@ -165,6 +165,8 @@ def parse(virtual, physical=None):
     v = bytearray(virtual)
     tex_ptr = struct.unpack_from("<Q", v, 0x30)[0]
     count = struct.unpack_from("<H", v, 0x38)[0]
+    if count == 0 or tex_ptr == 0:
+        return Dictionary(v, [])                     # an empty dictionary (some packs ship one)
     if (tex_ptr & 0xF0000000) != VIRTUAL_TAG:
         raise ValueError("not a texture dictionary: texture array pointer is not virtual")
     array = tex_ptr & OFFSET_MASK
@@ -196,11 +198,16 @@ def parse(virtual, physical=None):
     return Dictionary(v, textures)
 
 
-def shrink(d, target, skip=None, converter=None):
+UNCOMPRESSED = {21, 22, 32}   # A8R8G8B8, X8R8G8B8, A8B8G8R8: 4 bytes per pixel, 4-8x the memory of DXT
+
+
+def shrink(d, target, skip=None, converter=None, recompress=False):
     """
     Bring every texture down to max(width, height) <= target.
     Mip levels are dropped first (exact, no image processing). A texture that has no mip chain to
     promote is resampled through `converter` when one is given, otherwise it is skipped.
+    With `recompress`, 32-bit uncompressed textures of 16 px or more are also re-encoded as DXT at
+    their current size (DXT5 when they carry alpha, DXT1 otherwise), with a full mip chain.
     Returns a report dict.
     """
     report = {"resized": 0, "unchanged": 0, "skipped": [], "details": []}
@@ -211,6 +218,21 @@ def shrink(d, target, skip=None, converter=None):
 
     for t in d.textures:
         if max(t.width, t.height) <= target:
+            if recompress and converter is not None and t.format_code in UNCOMPRESSED and min(t.width, t.height) >= 16 \
+                    and not (skip and skip(t)) and converter.supports(t.format):
+                before = (t.width, t.height, t.levels, t.format)
+                try:
+                    w, h, levels, data, fmt = converter.resize(t.mip_bytes(0), t.width, t.height, t.format, max(t.width, t.height))
+                except Exception as e:
+                    skipped(t, f"{converter.name}: {e}")
+                    continue
+                t.width, t.height, t.levels, t.data = w, h, levels, data
+                t.format_code = _by_name(fmt)
+                t.stride = stride_for(w, t.format_code)
+                report["resized"] += 1
+                report["details"].append({"name": t.name, "from": "%dx%d %s" % (before[0], before[1], before[3]), "to": "%dx%d %s" % (w, h, fmt),
+                                          "levels": [before[2], t.levels], "format": t.format, "method": "recompress"})
+                continue
             report["unchanged"] += 1
             continue
         if skip and skip(t):
@@ -261,6 +283,7 @@ def serialize(d):
     for t, offset in zip(d.textures, offsets):
         physical[offset:offset + len(t.data)] = t.data
         struct.pack_into("<HHHH", v, t.record_offset + 0x50, t.width, t.height, t.depth, t.stride)
+        struct.pack_into("<I", v, t.record_offset + 0x58, t.format_code)
         v[t.record_offset + 0x5D] = t.levels
         struct.pack_into("<Q", v, t.record_offset + 0x70, PHYSICAL_TAG | offset)
         usage = struct.unpack_from("<I", v, t.record_offset + SIZE_FIELD)[0] & 0xFFF

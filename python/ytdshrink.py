@@ -50,6 +50,7 @@ def main(argv=None):
     ap.add_argument("--apply", action="store_true", help="rewrite files (requires --backup)")
     ap.add_argument("--backup", default=None, help="folder that receives the originals and the log")
     ap.add_argument("--keep-emissive", action="store_true", help="also shrink emissive/glow textures")
+    ap.add_argument("--keep-uncompressed", action="store_true", help="leave 32-bit uncompressed textures as they are (default: re-encode as DXT)")
     ap.add_argument("--json", action="store_true", help="print the plan/result as JSON instead of a table")
     args = ap.parse_args(argv)
 
@@ -57,7 +58,8 @@ def main(argv=None):
         print("--apply needs --backup DIR: originals are always copied before a file is changed", file=sys.stderr)
         return 2
 
-    settings = {"optimizerTargetResolution": args.max, "optimizerSkipEmissive": not args.keep_emissive}
+    settings = {"optimizerTargetResolution": args.max, "optimizerSkipEmissive": not args.keep_emissive,
+                "optimizerRecompress": not args.keep_uncompressed}
     skip = engine.skip_rule(settings)
     conv = engine.converter_mod.find()
     files = collect(args.paths, args.only)
@@ -65,7 +67,7 @@ def main(argv=None):
         print("no .ytd files found")
         return 1
 
-    plan = [engine.plan_file(path, rel, disk, args.max, skip, conv) for path, rel, disk in files]
+    plan = [engine.plan_file(path, rel, disk, args.max, skip, conv, not args.keep_uncompressed) for path, rel, disk in files]
 
     if not args.apply:
         if args.json:
@@ -80,7 +82,8 @@ def main(argv=None):
             after += f["memory_after_mib"] if f["memory_after_mib"] is not None else f["memory_mib"]
             note = f["skip_reason"] or ""
             if f["should_optimize"]:
-                note = f"{len(f['oversized'])} oversized" + (f", {f['needs_converter']} need converter" if f["needs_converter"] else "")
+                rc = sum(1 for t in f["oversized"] if t.get("method") == "recompress")
+                note = f"{len(f['oversized']) - rc} oversized" + (f", {rc} uncompressed" if rc else "") + (f", {f['needs_converter']} need converter" if f["needs_converter"] else "")
             aft = f"{f['memory_after_mib']:.1f}" if f["memory_after_mib"] is not None else "-"
             print(f"{f['rel_path'][-40:]:<40}{f['texture_count']:>9}{f['max_dimension']:>8}{f['memory_mib']:>9.1f}{aft:>8}  {note}")
         print("-" * 100)

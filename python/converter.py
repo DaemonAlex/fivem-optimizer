@@ -22,6 +22,15 @@ import ytd
 
 _TEXCONV_FORMAT = {"DXT1": "BC1_UNORM", "DXT3": "BC2_UNORM", "DXT5": "BC3_UNORM", "ATI1": "BC4_UNORM", "ATI2": "BC5_UNORM"}
 _MAGICK_COMPRESSION = {"DXT1": "dxt1", "DXT3": "dxt5", "DXT5": "dxt5"}   # ImageMagick cannot write DXT3/ATI1/ATI2
+# uncompressed sources are always re-encoded block-compressed: DXT5 when the format carries alpha, else DXT1
+_UNCOMPRESSED_TO = {"A8R8G8B8": "DXT5", "A8B8G8R8": "DXT5", "X8R8G8B8": "DXT1"}
+
+
+def output_format(fmt):
+    """The block format a texture will have after resampling."""
+    if fmt in _UNCOMPRESSED_TO:
+        return _UNCOMPRESSED_TO[fmt]
+    return "DXT5" if fmt == "DXT3" else fmt
 
 
 class Unsupported(ValueError):
@@ -44,18 +53,20 @@ class Converter:
         self.exe = exe
 
     def supports(self, fmt):
-        return fmt in (_TEXCONV_FORMAT if self.name == "texconv" else _MAGICK_COMPRESSION)
+        table = _TEXCONV_FORMAT if self.name == "texconv" else _MAGICK_COMPRESSION
+        return fmt in table or (fmt in _UNCOMPRESSED_TO and _UNCOMPRESSED_TO[fmt] in table)
 
     def command(self, in_path, out_dir, width, height, fmt, levels):
         """argv that turns in_path into a full mip chain of width x height in `fmt` inside out_dir."""
         if not self.supports(fmt):
             raise Unsupported(f"{self.name} cannot write {fmt}")
+        out = output_format(fmt)
         if self.name == "texconv":
-            return [self.exe, "-nologo", "-y", "-f", _TEXCONV_FORMAT[fmt], "-w", str(width), "-h", str(height),
+            return [self.exe, "-nologo", "-y", "-f", _TEXCONV_FORMAT[out], "-w", str(width), "-h", str(height),
                     "-m", str(levels), "-o", out_dir, in_path]
         # ImageMagick only builds mip chains for power-of-two sizes, so ask for one file per level
         # in a single invocation (one decode of the source). Levels under 4 px are one 4x4 block.
-        argv = [self.exe, in_path, "-define", f"dds:compression={_MAGICK_COMPRESSION[fmt]}", "-define", "dds:mipmaps=0"]
+        argv = [self.exe, in_path, "-define", f"dds:compression={_MAGICK_COMPRESSION[out]}", "-define", "dds:mipmaps=0"]
         for i in range(levels):
             lw, lh = max(4, width >> i), max(4, height >> i)
             argv += ["(", "+clone", "-resize", f"{lw}x{lh}!", "-write", os.path.join(out_dir, f"level{i}.dds"), "+delete", ")"]
@@ -92,8 +103,8 @@ class Converter:
                     chain += data[:need]
                 data = bytes(chain)
         out_fmt = got_fmt
-        if out_fmt != fmt and not (fmt == "DXT3" and out_fmt == "DXT5"):
-            raise RuntimeError(f"{self.name} changed the format from {fmt} to {out_fmt}")
+        if out_fmt != output_format(fmt):
+            raise RuntimeError(f"{self.name} returned {out_fmt}, wanted {output_format(fmt)} (source {fmt})")
         need = ytd.chain_size(new_w, new_h, out_fmt, levels)
         if len(data) < need:
             raise RuntimeError(f"{self.name} returned {len(data)} bytes, mip chain needs {need}")

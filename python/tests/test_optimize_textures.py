@@ -91,3 +91,16 @@ def test_execute_without_backup_folder_is_refused(folder):
     res = run("--execute", json.dumps({"folder_path": str(folder), "selected_files": ["fer49p2025.ytd"],
                                        "backup_folder": None, "target_resolution": 1024}))
     assert res["status"] == "no_backup" and res["files_succeeded"] == 0
+
+
+def test_plan_offers_to_compress_uncompressed_textures(tmp_path):
+    fixture("servicevan.ytd")
+    shutil.copy(os.path.join(FIXTURES, "servicevan.ytd"), tmp_path / "servicevan.ytd")
+    plan = run(str(tmp_path), json.dumps({"optimizerTargetResolution": 1024}))
+    f = plan["files"][0]
+    if plan["converter"]:
+        assert f["should_optimize"] is True and f["memory_after_mib"] < 8
+        assert f["oversized"][0]["method"] == "resample"
+        assert any(t["method"] == "recompress" for t in f["oversized"])
+    else:
+        assert f["needs_converter"] == 1
