@@ -30,10 +30,12 @@ MIB = 1024 * 1024
 def collect(paths, only):
     files = []
     for p in paths:
+        p = os.path.abspath(p)
         if os.path.isfile(p):
-            files.append((os.path.abspath(p), os.path.basename(p), os.path.getsize(p)))
+            files.append((p, os.path.basename(p), os.path.getsize(p)))
         elif os.path.isdir(p):
-            files += [(a, r, s) for a, r, s in engine.scan_ytd_files(p)]
+            base = os.path.dirname(p) if len(paths) > 1 else p
+            files += [(a, os.path.relpath(a, base), s) for a, r, s in engine.scan_ytd_files(p)]
         else:
             print(f"not found: {p}", file=sys.stderr)
     if only:
@@ -95,9 +97,7 @@ def main(argv=None):
     unchanged = [f for f in plan if not f["should_optimize"]]
     result = {"status": "no_files", "results": [], "message": "nothing to do"}
     if todo:
-        folder = os.path.commonpath([f["path"] for f in todo]) if len(todo) > 1 else os.path.dirname(todo[0]["path"])
-        if os.path.isfile(folder):
-            folder = os.path.dirname(folder)
+        folder = os.path.commonpath([os.path.dirname(f["path"]) for f in todo])
         payload = {"folder_path": folder, "selected_files": [os.path.relpath(f["path"], folder) for f in todo],
                    "backup_folder": args.backup, "target_resolution": args.max, "settings": settings}
         result = engine.execute_optimization(payload)

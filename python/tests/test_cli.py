@@ -69,3 +69,21 @@ def test_json_output(folder):
     assert code == 0, err
     data = json.loads(out)
     assert data["status"] == "ready" and any(f["rel_path"] == "fer49p2025.ytd" for f in data["files"])
+
+
+def test_apply_across_several_top_level_folders(tmp_path):
+    fixture("fer49p2025.ytd")
+    a = tmp_path / "[a]" / "car" / "stream"; b = tmp_path / "[b]" / "map" / "stream"
+    a.mkdir(parents=True); b.mkdir(parents=True)
+    shutil.copy(os.path.join(FIXTURES, "fer49p2025.ytd"), a / "one.ytd")
+    shutil.copy(os.path.join(FIXTURES, "servicevan.ytd"), b / "two.ytd")
+    cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        code, out, err = run("[a]", "[b]", "--apply", "--backup", str(tmp_path / "bk"))
+    finally:
+        os.chdir(cwd)
+    assert code == 0, err + out
+    assert out.count("optimized ") == 2, out
+    assert "outside the scanned folder" not in out
+    assert (tmp_path / "bk" / "[a]" / "car" / "stream" / "one.ytd").exists()
