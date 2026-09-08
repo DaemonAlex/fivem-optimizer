@@ -34,7 +34,7 @@ def source(tmp_path):
 @needs_corpus
 def test_build_merged_resource(source, tmp_path):
     out = tmp_path / "gb_audio"
-    res = subprocess.run([sys.executable, CLI, str(source), "--out", str(out), "--name", "gbaudio"], capture_output=True, text=True)
+    res = subprocess.run([sys.executable, CLI, str(source), "--out", str(out), "--name", "gbaudio", "--max-waves-per-pack", "500"], capture_output=True, text=True)
     assert res.returncode == 0, res.stderr + res.stdout
     assert (out / "fxmanifest.lua").exists()
     manifest = (out / "fxmanifest.lua").read_text()
@@ -75,3 +75,36 @@ def test_refuses_to_overwrite_and_writes_report(source, tmp_path):
     assert (out / "MERGE-REPORT.txt").exists()
     report = (out / "MERGE-REPORT.txt").read_text()
     assert "conflict" in report.lower() and "wave" in report.lower()
+
+
+@needs_corpus
+def test_waves_can_be_split_across_several_packs(source, tmp_path):
+    out = tmp_path / "gb_audio"
+    res = subprocess.run([sys.executable, CLI, str(source), "--out", str(out), "--name", "gbaudio", "--max-waves-per-pack", "40"], capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr + res.stdout
+    packs = sorted(p for p in os.listdir(out / "sfx") if p.startswith("dlc_gbaudio"))
+    assert len(packs) >= 3 and all(len(os.listdir(out / "sfx" / p)) <= 40 for p in packs)
+    manifest = (out / "fxmanifest.lua").read_text()
+    assert manifest.count("AUDIO_WAVEPACK") == len(packs)
+    merged = relmerge.parse((out / "audioconfig" / "gbaudio_sounds.dat54.rel").read_bytes())
+    refs = set(merged.pack_refs())
+    # every wave is referenced under the folder it actually sits in
+    for p in packs:
+        for w in os.listdir(out / "sfx" / p):
+            assert relmerge.joaat(f"{p}/{w[:-4]}") in refs, (p, w)
+
+
+@needs_corpus
+def test_synth_data_can_be_kept_unmerged(source, tmp_path):
+    # give the source two declared synth files so the option has something to keep
+    manifest = source / "fxmanifest.lua"
+    text = manifest.read_text()
+    text += "\ndata_file 'AUDIO_SYNTHDATA' 'audioconfig/gb811s2_amp.dat'\ndata_file 'AUDIO_SYNTHDATA' 'audioconfig/gbargento7f_amp.dat'\n"
+    manifest.write_text(text)
+    out = tmp_path / "gb_audio"
+    res = subprocess.run([sys.executable, CLI, str(source), "--out", str(out), "--name", "gbaudio", "--keep-synth"], capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr + res.stdout
+    m = (out / "fxmanifest.lua").read_text()
+    assert m.count("AUDIO_SYNTHDATA") == 2 and "gb811s2_amp.dat'" in m
+    assert (out / "audioconfig" / "gb811s2_amp.dat10.rel").exists()
+    assert not (out / "audioconfig" / "gbaudio_amp.dat10.rel").exists()

@@ -20,6 +20,8 @@ index, hash table and pack table is shifted. Wave containers are referenced by t
 
 Duplicates: identical items under the same hash are dropped; differing ones keep the first and are
 reported, because the game would otherwise pick one at random.
+
+The index must stay sorted by the rotated hash (see rotated()): the game finds items by binary search.
 """
 import struct
 from dataclasses import dataclass, field
@@ -116,10 +118,19 @@ def _split_container(name):
     return None
 
 
+def _rename(pack_rename, pack, wave):
+    """pack_rename may take (pack) or (pack, wave); returns the new folder or None."""
+    try:
+        return pack_rename(pack, wave)
+    except TypeError:
+        return pack_rename(pack)
+
+
 def merge(rels, pack_rename=None):
     """
-    -> (merged Rel, report). `pack_rename(pack_folder) -> new_folder` moves every wave reference
-    into the returned folder (use one folder for the whole merged resource).
+    -> (merged Rel, report). `pack_rename(pack_folder[, wave]) -> new_folder` moves each wave
+    reference into the returned folder; return the same folder for every wave for a single pack,
+    or spread waves across several folders (the game copes better with smaller wave packs).
     """
     types = {r.type for r in rels}
     if len(types) != 1:
@@ -138,7 +149,7 @@ def merge(rels, pack_rename=None):
             split = _split_container(n)
             if split and pack_rename:
                 pack, wave = split
-                new = pack_rename(pack)
+                new = _rename(pack_rename, pack, wave)
                 if new and new != pack:
                     rewrite[joaat(f"{pack}/{wave}")] = joaat(f"{new}/{wave}")
                     report["packs"][pack] = new
@@ -180,11 +191,26 @@ def merge(rels, pack_rename=None):
         for n in r.names:
             split = _split_container(n)
             if split and pack_rename:
-                new = pack_rename(split[0])
+                new = _rename(pack_rename, split[0], split[1])
                 if new and new != split[0]:
                     folder = "DLC_" + new[4:] if new.startswith("dlc_") else new
                     n = folder + "\\" + n.split("\\", 1)[1]
             if n not in names:
                 names.append(n)
+    # The game binary-searches the index by a byte-rotated hash (CodeWalker RelFile.BuildIndex sorts the
+    # same way; every shipped file checked, 634 of 634, is in this order). An appended, unsorted index
+    # makes every lookup past the first source miss: the bank loads, the car stays silent.
+    index.sort(key=lambda e: rotated(e[0]))
     report["items"] = len(index)
     return Rel(rtype, bytes(data), names, index, hash_offsets, pack_offsets, "merged"), report
+
+
+def rotated(h):
+    """Index sort key: hash rotated right by 8 bits, as the game orders its lookup table."""
+    return ((h >> 8) | ((h << 24) & 0xFFFFFFFF)) & 0xFFFFFFFF
+
+
+def index_sorted(rel):
+    """True when the index is in the game's lookup order."""
+    keys = [rotated(h) for h, _o, _l in rel.index]
+    return keys == sorted(keys)

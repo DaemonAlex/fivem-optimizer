@@ -93,3 +93,27 @@ def test_refuses_to_merge_different_types():
     b = relmerge.Rel(54, b"\0\0\0\0", [], [], [], [])
     with pytest.raises(ValueError):
         relmerge.merge([a, b])
+
+
+@needs_corpus
+def test_every_shipped_file_keeps_its_index_in_lookup_order():
+    # the game binary-searches the index by the byte-rotated hash; every shipped file is in that order
+    files = corpus("game.dat151.rel") + corpus("sounds.dat54.rel")
+    assert files
+    for f in files:
+        assert relmerge.index_sorted(relmerge.parse(open(f, "rb").read())), f
+
+
+@needs_corpus
+def test_merge_keeps_index_in_lookup_order():
+    # appended, unsorted indexes load without error and play nothing: the lookup misses past the first source
+    srcs = [relmerge.parse(open(f, "rb").read()) for f in corpus("sounds.dat54.rel")[:12]]
+    assert len(srcs) > 1
+    merged, _ = relmerge.merge(srcs)
+    assert relmerge.index_sorted(merged)
+    assert relmerge.index_sorted(relmerge.parse(relmerge.write(merged)))
+
+
+def test_rotated_key_is_the_hash_rotated_right_by_a_byte():
+    assert relmerge.rotated(0x12345678) == 0x78123456
+    assert relmerge.rotated(0x000000FF) == 0xFF000000

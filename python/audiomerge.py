@@ -62,6 +62,9 @@ def main(argv=None):
     ap.add_argument("sources", nargs="+", help="resource folders holding fxmanifest.lua, audioconfig/, sfx/")
     ap.add_argument("--out", required=True, help="new resource folder to create")
     ap.add_argument("--name", required=True, help="short name: files become <name>_game.dat151.rel etc, waves go to sfx/dlc_<name>/")
+    ap.add_argument("--keep-synth", action="store_true", help="do not merge AUDIO_SYNTHDATA (.dat10) files: copy and declare each as shipped")
+    ap.add_argument("--drop-synth", action="store_true", help="leave AUDIO_SYNTHDATA (.dat10) files out entirely (the Gabz merge shipped none and plays fine)")
+    ap.add_argument("--max-waves-per-pack", type=int, default=120, help="split the waves across dlc_<name>, dlc_<name>2, ... with at most this many files each (default 120)")
     args = ap.parse_args(argv)
 
     if os.path.exists(args.out):
@@ -77,6 +80,8 @@ def main(argv=None):
     wave_names = {}
     problems = []
 
+    kept_synth = []      # (real path, declared path) copied as shipped when --keep-synth
+    own_packs = set()    # wave pack folders the sources ship; references to any other pack (RESIDENT etc) are left alone
     for src in args.sources:
         decl = declared(src)
         before["AUDIO_WAVEPACK"] += len(decl.get("AUDIO_WAVEPACK", []))
@@ -88,10 +93,16 @@ def main(argv=None):
                 if not real:
                     problems.append(f"{os.path.basename(src)}: declared {path} but no file found")
                     continue
+                if kind == "AUDIO_SYNTHDATA" and args.drop_synth:
+                    continue
+                if kind == "AUDIO_SYNTHDATA" and args.keep_synth:
+                    kept_synth.append((real, path))
+                    continue
                 rels.append(relmerge.parse(open(real, "rb").read(), os.path.relpath(real, src)))
             if rels:
                 merged.setdefault(kind, []).extend(rels)
         for packdir in decl.get("AUDIO_WAVEPACK", []):
+            own_packs.add(os.path.basename(packdir.rstrip("/")).lower())
             d = os.path.join(src, packdir)
             if not os.path.isdir(d):
                 problems.append(f"{os.path.basename(src)}: wave pack folder {packdir} missing")
@@ -109,8 +120,15 @@ def main(argv=None):
         print("no audio data files declared in the sources", file=sys.stderr)
         return 1
 
+    # assign every wave to a folder (by sorted wave name, so the split is stable)
+    per = max(1, args.max_waves_per_pack)
+    wave_folder = {}
+    for i, (src, f) in enumerate(sorted(waves, key=lambda x: x[1].lower())):
+        wave_folder[f[:-4].lower()] = pack if i // per == 0 else f"{pack}{i // per + 1}"
+    folders = sorted(set(wave_folder.values()) or {pack})
     os.makedirs(os.path.join(args.out, "audioconfig"))
-    os.makedirs(os.path.join(args.out, "sfx", pack))
+    for fo in folders:
+        os.makedirs(os.path.join(args.out, "sfx", fo))
     manifest_lines = ["fx_version 'cerulean'", "game 'gta5'", "",
                       f"-- built by audiomerge on {time.strftime('%Y-%m-%d %H:%M')} from: " + ", ".join(os.path.basename(os.path.abspath(s)) for s in args.sources),
                       "-- one registration per data type: FiveM caps addon audio banks at roughly 190", "",
@@ -118,7 +136,7 @@ def main(argv=None):
     data_lines = []
     for kind, rels in merged.items():
         rtype, msuffix, fsuffix = KINDS[kind]
-        rel, report = relmerge.merge(rels, pack_rename=(lambda _p: pack) if rtype == 54 else None)
+        rel, report = relmerge.merge(rels, pack_rename=(lambda p, wave: wave_folder.get(wave.lower(), pack) if p in own_packs else None) if rtype == 54 else None)
         out_path = os.path.join(args.out, "audioconfig", name + fsuffix)
         blob = relmerge.write(rel)
         with open(out_path, "wb") as fh:
@@ -126,22 +144,31 @@ def main(argv=None):
         check = relmerge.parse(blob)
         if len(check.index) != len(rel.index):
             problems.append(f"{kind}: verification failed, {len(check.index)} items after re-read, {len(rel.index)} written")
+        if not relmerge.index_sorted(check):
+            problems.append(f"{kind}: verification failed, index is not in the game's lookup order")
         reports[kind] = report
         manifest_lines.append(f"    'audioconfig/{name}{fsuffix}',")
         data_lines.append(f"data_file '{kind}' 'audioconfig/{name}{msuffix}'")
+    for real, path in kept_synth:
+        dest = os.path.join(args.out, "audioconfig", os.path.basename(real))
+        shutil.copy2(real, dest)
+        manifest_lines.append(f"    'audioconfig/{os.path.basename(real)}',")
+        data_lines.append(f"data_file 'AUDIO_SYNTHDATA' 'audioconfig/{os.path.basename(path)}'")
     for src, f in waves:
-        shutil.copy2(src, os.path.join(args.out, "sfx", pack, f))
-    manifest_lines += [f"    'sfx/{pack}/*.awc',", "}", ""] + data_lines + [f"data_file 'AUDIO_WAVEPACK' 'sfx/{pack}'", ""]
+        shutil.copy2(src, os.path.join(args.out, "sfx", wave_folder[f[:-4].lower()], f))
+    manifest_lines += [f"    'sfx/{fo}/*.awc'," for fo in folders] + ["}", ""] + data_lines + [f"data_file 'AUDIO_WAVEPACK' 'sfx/{fo}'" for fo in folders] + [""]
     with open(os.path.join(args.out, "fxmanifest.lua"), "w") as fh:
         fh.write("\n".join(manifest_lines))
 
     after = {k: (1 if k in merged else 0) for k in KINDS}
-    after["AUDIO_WAVEPACK"] = 1 if waves else 0
+    if kept_synth:
+        after["AUDIO_SYNTHDATA"] = len(kept_synth)
+    after["AUDIO_WAVEPACK"] = len(folders) if waves else 0
     lines = [f"audiomerge report - {time.strftime('%Y-%m-%d %H:%M:%S')}", f"sources: {', '.join(args.sources)}", f"output: {args.out}", "",
              "registrations before -> after:"]
     for k in list(KINDS) + ["AUDIO_WAVEPACK"]:
         lines.append(f"  {k:<16} {before[k]:>4} -> {after[k]}")
-    lines += ["", f"waves copied into sfx/{pack}: {len(waves)}", ""]
+    lines += ["", f"waves copied: {len(waves)} into {len(folders)} pack folder(s) ({', '.join(folders)}), max {per} per folder", ""]
     for kind, rep in reports.items():
         lines.append(f"{kind}: {rep['sources']} files -> {rep['items']} items, {rep['dropped_identical']} exact duplicates dropped, {len(rep['conflicts'])} conflicts")
         for c in rep["conflicts"]:
