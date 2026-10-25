@@ -33,6 +33,7 @@ import traceback
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import converter as converter_mod
 import rsc7
+import yft
 import ytd
 
 MIB = 1024 * 1024
@@ -62,11 +63,27 @@ def skip_rule(settings):
     return skip
 
 
-def scan_ytd_files(folder):
+class Unsupported(ValueError):
+    """The file opened fine but its textures cannot be shrunk safely (see yft.parse)."""
+
+
+def load_dictionary(path, r, physical=None):
+    """Texture dictionary of a .ytd, or the embedded one of a .yft. Raises Unsupported for a .yft that cannot be shrunk."""
+    if path.lower().endswith(".yft"):
+        d, why = yft.parse(r.virtual, physical, r.physical_size)
+        if why:
+            raise Unsupported(why)
+        return d
+    return ytd.parse(r.virtual, physical)
+
+
+def scan_ytd_files(folder, include_yft=False):
+    """Every .ytd under `folder` (and every .yft with `include_yft`), largest first."""
+    exts = (".ytd", ".yft") if include_yft else (".ytd",)
     found = []
     for root, _dirs, names in os.walk(folder):
         for name in names:
-            if name.lower().endswith(".ytd"):
+            if name.lower().endswith(exts):
                 path = os.path.join(root, name)
                 try:
                     found.append((path, os.path.relpath(path, folder), os.path.getsize(path)))
@@ -116,7 +133,10 @@ def plan_file(path, rel, disk_size, target, skip, conv, recompress=True):
              "oversized": [], "needs_converter": 0, "error": None}
     try:
         r = rsc7.read_virtual(path)
-        d = ytd.parse(r.virtual)
+        d = load_dictionary(path, r)
+    except Unsupported as e:
+        entry["skip_reason"] = str(e)[:1].upper() + str(e)[1:]
+        return entry
     except rsc7.NotRsc7 as e:
         entry["skip_reason"] = "FXAP-encrypted (FiveM escrow): the file cannot be opened" if "FXAP" in str(e) else f"Not a readable RSC7 file: {e}"
         entry["error"] = str(e)
@@ -160,9 +180,10 @@ def optimize_batch(folder, settings):
     target = int(settings.get("optimizerTargetResolution", 1024))
     skip = skip_rule(settings)
     recompress = bool(settings.get("optimizerRecompress", True))
+    include_yft = bool(settings.get("optimizerIncludeYft", False))
     conv = converter_mod.find()
-    progress("Scanning for .ytd files...")
-    files = scan_ytd_files(folder)
+    progress("Scanning for .ytd files..." if not include_yft else "Scanning for .ytd and .yft files...")
+    files = scan_ytd_files(folder, include_yft)
     if not files:
         return {"status": "no_files", "message": "No .ytd files found in this folder", "files": [], "total_files": 0,
                 "optimizable_files": 0, "total_size": 0, "estimated_savings": 0, "target_resolution": target,
@@ -200,9 +221,9 @@ def backup_file(abs_path, rel_path, backup_dir):
 
 
 def optimize_file(abs_path, target, skip, conv, recompress=True):
-    """Shrink one .ytd in place. Returns (memory_before, memory_after, report)."""
+    """Shrink one .ytd, or the embedded textures of one .yft, in place. Returns (memory_before, memory_after, report)."""
     r = rsc7.read(abs_path)
-    d = ytd.parse(r.virtual, r.physical)
+    d = load_dictionary(abs_path, r, r.physical)
     report = ytd.shrink(d, target, skip=skip, converter=conv, recompress=recompress)
     if report["resized"] == 0:
         return r.physical_size, r.physical_size, report
@@ -210,7 +231,7 @@ def optimize_file(abs_path, target, skip, conv, recompress=True):
     tmp = abs_path + ".fivem-optimizer.tmp"
     rsc7.write(tmp, r.version, virtual, physical, virtual_flags=r.virtual_flags, physical_flags=pflags)
     check = rsc7.read(tmp)
-    d2 = ytd.parse(check.virtual, check.physical)
+    d2 = load_dictionary(abs_path, check, check.physical)
     if [t.name for t in d2.textures] != [t.name for t in d.textures]:
         os.remove(tmp)
         raise RuntimeError("verification failed: the rewritten file does not list the same textures")

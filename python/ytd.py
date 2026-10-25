@@ -160,11 +160,15 @@ def _cstring(buf, offset):
     return buf[offset:end if end >= 0 else len(buf)].decode("latin1")
 
 
-def parse(virtual, physical=None):
-    """Read every texture record. Pixel data is sliced out of the physical segment when one is given."""
+def parse(virtual, physical=None, base=0):
+    """
+    Read every texture record. Pixel data is sliced out of the physical segment when one is given.
+    `base` is the dictionary's offset in the virtual segment: 0 for a .ytd, somewhere inside the
+    model for a texture dictionary embedded in a .yft or .ydr. Pointers are absolute either way.
+    """
     v = bytearray(virtual)
-    tex_ptr = struct.unpack_from("<Q", v, 0x30)[0]
-    count = struct.unpack_from("<H", v, 0x38)[0]
+    tex_ptr = struct.unpack_from("<Q", v, base + 0x30)[0]
+    count = struct.unpack_from("<H", v, base + 0x38)[0]
     if count == 0 or tex_ptr == 0:
         return Dictionary(v, [])                     # an empty dictionary (some packs ship one)
     if (tex_ptr & 0xF0000000) != VIRTUAL_TAG:

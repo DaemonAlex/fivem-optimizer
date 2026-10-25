@@ -73,6 +73,7 @@ Options:
 |------|---------|
 | `--max N` | longest side allowed in pixels (default 1024) |
 | `--only a,b` | only files whose name contains one of these fragments |
+| `--yft` | also shrink textures embedded in vehicle models (`.yft`), see below |
 | `--apply` | write changes (needs `--backup`) |
 | `--backup DIR` | where originals and `fivem-optimizer-log.txt` go; relative paths are kept |
 | `--keep-emissive` | also shrink emissive/glow textures |
@@ -82,6 +83,18 @@ Options:
 After applying, restart the server and read the boot log: the `uses N MiB` line for each file should show the new
 number. The log in the backup folder lists every texture that changed, with before/after size, format and mip count,
 and every one that was kept, with the reason.
+
+### Textures inside vehicle models (`--yft`)
+
+Many vehicle packs put textures inside the model instead of a `.ytd`. Livery and sticker parts are the worst: one
+`.yft` holding a single 4096 or 6000 px texture costs 32 to 64 MiB. With `--yft` these embedded textures are shrunk
+the same way as a `.ytd` (top mip levels dropped, nothing else changed).
+
+A `.yft` is only rewritten when its physical memory holds nothing but those textures. When the model keeps vertex or
+index data in the same memory, the file is listed as "Model data shares the texture memory" and left alone, because
+moving that data safely needs a full model parser. Models with no embedded textures are listed and skipped.
+
+    sudo python3 /opt/fivem/tools/ytdshrink/ytdshrink.py <folder> --yft --apply --backup /opt/fivem/backups/ytdshrink-$(date +%Y%m%d)
 
 ### Put a file back
 
