@@ -20,6 +20,11 @@ FXServer's "Asset X uses N MiB of physical memory" boot warnings):
                 + 8*bit24 + 4*bit25 + 2*bit26 + 1*bit27
     size      = pages * base page
 
+The top four bits of each flag word are not part of the size: they carry the resource version,
+low nibble in the virtual flags and high nibble in the physical flags (162 = 0xA2 for a .yft puts
+0xA in the virtual word and 0x2 in the physical word; a .ytd, 13 = 0x0D, has 0 in the physical
+word). A rewrite must keep them, or the game sees a different resource version.
+
 Files whose magic is "FXAP" are FiveM-encrypted (escrow) and cannot be read or rewritten here.
 """
 import struct
@@ -28,6 +33,7 @@ from dataclasses import dataclass
 
 MAGIC = b"RSC7"
 VERSION_YTD = 13
+VERSION_BITS = 0xF0000000   # top nibble of a flag word: half of the resource version, not size
 
 # (count bit width, shift, page multiple) for each field in a flag word, largest pages first.
 _FIELDS = (

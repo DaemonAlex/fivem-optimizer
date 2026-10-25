@@ -228,6 +228,7 @@ def optimize_file(abs_path, target, skip, conv, recompress=True):
     if report["resized"] == 0:
         return r.physical_size, r.physical_size, report
     virtual, physical, pflags = ytd.serialize(d)
+    pflags |= r.physical_flags & rsc7.VERSION_BITS   # keep the resource version nibble (0 for a .ytd, 2 for a .yft)
     tmp = abs_path + ".fivem-optimizer.tmp"
     rsc7.write(tmp, r.version, virtual, physical, virtual_flags=r.virtual_flags, physical_flags=pflags)
     check = rsc7.read(tmp)

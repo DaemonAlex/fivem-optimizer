@@ -42,9 +42,11 @@ def build(width=2048, levels=12, extra_physical=False, with_dictionary=True):
 
 
 def write(tmp_path, name="part.yft", **kw):
+    """Write the model with real .yft version nibbles in the flag words (162 = 0xA2: 0xA virtual, 0x2 physical)."""
     v, p, flags = build(**kw)
     path = str(tmp_path / name)
-    rsc7.write(path, yft.VERSION_YFT, v, p, physical_flags=flags)
+    rsc7.write(path, yft.VERSION_YFT, v, p, virtual_flags=rsc7.size_to_flags(len(v)) | 0xA0000000,
+               physical_flags=flags | 0x20000000)
     return path
 
 
@@ -78,6 +80,8 @@ def test_shrink_rewrites_the_file_and_keeps_the_pixels(tmp_path):
     assert report["resized"] == 1 and mem_after < mem_before
     after = rsc7.read(path)
     assert after.version == yft.VERSION_YFT and after.virtual_flags == before.virtual_flags
+    assert after.physical_flags & rsc7.VERSION_BITS == 0x20000000     # version nibble kept
+    assert after.physical_flags != before.physical_flags                # but the size did change
     d, why = yft.parse(after.virtual, after.physical)
     assert why is None
     t, = d.textures
@@ -109,6 +113,19 @@ def test_scan_only_includes_yft_when_asked(tmp_path):
     names = lambda inc: sorted(os.path.basename(f[0]) for f in engine.scan_ytd_files(str(tmp_path), inc))
     assert names(False) == ["skin.ytd"]
     assert names(True) == ["part.yft", "skin.ytd"]
+
+
+def test_real_livery_part_keeps_its_header_version_when_rewritten(tmp_path):
+    import shutil
+    path = str(tmp_path / "tfremus_livery9.yft")
+    shutil.copy(fixture("tfremus_livery9.yft"), path)
+    before = rsc7.read_header(path)
+    engine.optimize_file(path, 1024, lambda t: False, None)
+    after = rsc7.read_header(path)
+    assert after[0] == before[0] == yft.VERSION_YFT
+    assert after[1] == before[1]                                         # virtual word untouched
+    assert after[2] & rsc7.VERSION_BITS == before[2] & rsc7.VERSION_BITS == 0x20000000
+    assert rsc7.flags_to_size(after[2]) < rsc7.flags_to_size(before[2]) // 16
 
 
 def test_real_livery_part_shrinks():
