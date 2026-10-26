@@ -2,7 +2,7 @@
 """
 ytdshrink - shrink GTA V / FiveM texture dictionaries (.ytd) from the command line.
 
-    ytdshrink.py <folder-or-file> [more paths...] [--max 1024] [--only name,name] [--yft] [--apply --backup DIR] [--json]
+    ytdshrink.py <folder-or-file> [more paths...] [--max 1024] [--only name,name] [--yft] [--ydd] [--apply --backup DIR] [--json]
 
 Without --apply nothing is written: you get a table of every .ytd found, the memory the game
 allocates for it now, and what it would allocate after shrinking. With --apply each file is copied
@@ -19,6 +19,10 @@ they are left alone and listed under "needs converter".
 With --yft, vehicle models (.yft) are scanned too and their embedded textures shrunk the same way.
 A .yft is only rewritten when its physical memory holds nothing but those textures; one that also
 keeps model data there is listed with the reason and left alone.
+
+With --ydd, drawable dictionaries (.ydd: clothing, props, map objects) are scanned too, under the
+same rule. Clothing packs keep their diffuse, normal and specular maps inside the .ydd, so the
+separate .ytd files tell only part of the story until this flag is on.
 """
 import argparse
 import json
@@ -31,7 +35,7 @@ import optimize_textures as engine
 MIB = 1024 * 1024
 
 
-def collect(paths, only, include_yft=False):
+def collect(paths, only, include_yft=False, include_ydd=False):
     files = []
     for p in paths:
         p = os.path.abspath(p)
@@ -39,7 +43,7 @@ def collect(paths, only, include_yft=False):
             files.append((p, os.path.basename(p), os.path.getsize(p)))
         elif os.path.isdir(p):
             base = os.path.dirname(p) if len(paths) > 1 else p
-            files += [(a, os.path.relpath(a, base), s) for a, r, s in engine.scan_ytd_files(p, include_yft)]
+            files += [(a, os.path.relpath(a, base), s) for a, r, s in engine.scan_ytd_files(p, include_yft, include_ydd)]
         else:
             print(f"not found: {p}", file=sys.stderr)
     if only:
@@ -50,8 +54,9 @@ def collect(paths, only, include_yft=False):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("paths", nargs="+", help="folders (searched recursively) or .ytd/.yft files")
+    ap.add_argument("paths", nargs="+", help="folders (searched recursively) or .ytd/.yft/.ydd files")
     ap.add_argument("--yft", action="store_true", help="also shrink textures embedded in vehicle models (.yft)")
+    ap.add_argument("--ydd", action="store_true", help="also shrink textures embedded in drawable dictionaries (.ydd: clothing, props)")
     ap.add_argument("--max", type=int, default=1024, help="longest side allowed, in pixels (default 1024)")
     ap.add_argument("--only", default=None, help="comma-separated name fragments to limit which files are touched")
     ap.add_argument("--apply", action="store_true", help="rewrite files (requires --backup)")
@@ -69,9 +74,10 @@ def main(argv=None):
                 "optimizerRecompress": not args.keep_uncompressed}
     skip = engine.skip_rule(settings)
     conv = engine.converter_mod.find()
-    files = collect(args.paths, args.only, args.yft)
+    files = collect(args.paths, args.only, args.yft, args.ydd)
     if not files:
-        print("no .ytd or .yft files found" if args.yft else "no .ytd files found")
+        kinds = ".ytd" + (" or .yft" if args.yft else "") + (" or .ydd" if args.ydd else "")
+        print(f"no {kinds} files found")
         return 1
 
     plan = [engine.plan_file(path, rel, disk, args.max, skip, conv, not args.keep_uncompressed) for path, rel, disk in files]
