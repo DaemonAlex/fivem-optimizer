@@ -44,12 +44,19 @@ def texture_dictionary_offset(virtual):
     return _virtual(_u64(virtual, shader_group + 0x08))
 
 
-def physical_refs(virtual, physical_size):
-    """Every 8-byte-aligned value in the virtual segment that is a pointer into the physical segment."""
+BLOCK_ALIGN = 16   # every block in the physical segment (pixels, vertex and index buffers) starts on a 16-byte boundary
+
+
+def physical_refs(virtual, physical_size, align=BLOCK_ALIGN):
+    """
+    Every 8-byte-aligned value in the virtual segment that is a pointer into the physical segment.
+    A value whose target is not block-aligned is not a pointer (a hash or a float that happens to
+    carry the tag) and is left out, so it cannot refuse a file that is in fact safe to rewrite.
+    """
     refs = set()
     for off in range(0, len(virtual) - 7, 8):
         q = struct.unpack_from("<Q", virtual, off)[0]
-        if q >> 32 == 0 and (q & 0xF0000000) == ytd.PHYSICAL_TAG and (q & _M) < physical_size:
+        if q >> 32 == 0 and (q & 0xF0000000) == ytd.PHYSICAL_TAG and (q & _M) < physical_size and (q & _M) % align == 0:
             refs.add(q & _M)
     return refs
 

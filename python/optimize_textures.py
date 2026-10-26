@@ -33,6 +33,7 @@ import traceback
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import converter as converter_mod
 import rsc7
+import ydd
 import yft
 import ytd
 
@@ -68,18 +69,22 @@ class Unsupported(ValueError):
 
 
 def load_dictionary(path, r, physical=None):
-    """Texture dictionary of a .ytd, or the embedded one of a .yft. Raises Unsupported for a .yft that cannot be shrunk."""
-    if path.lower().endswith(".yft"):
-        d, why = yft.parse(r.virtual, physical, r.physical_size)
+    """
+    Texture dictionary of a .ytd, or the embedded one(s) of a .yft or .ydd.
+    Raises Unsupported for a model whose textures cannot be shrunk safely.
+    """
+    lower = path.lower()
+    if lower.endswith(".yft") or lower.endswith(".ydd"):
+        d, why = (ydd if lower.endswith(".ydd") else yft).parse(r.virtual, physical, r.physical_size)
         if why:
             raise Unsupported(why)
         return d
     return ytd.parse(r.virtual, physical)
 
 
-def scan_ytd_files(folder, include_yft=False):
-    """Every .ytd under `folder` (and every .yft with `include_yft`), largest first."""
-    exts = (".ytd", ".yft") if include_yft else (".ytd",)
+def scan_ytd_files(folder, include_yft=False, include_ydd=False):
+    """Every .ytd under `folder` (every .yft with `include_yft`, every .ydd with `include_ydd`), largest first."""
+    exts = (".ytd",) + ((".yft",) if include_yft else ()) + ((".ydd",) if include_ydd else ())
     found = []
     for root, _dirs, names in os.walk(folder):
         for name in names:
@@ -181,9 +186,11 @@ def optimize_batch(folder, settings):
     skip = skip_rule(settings)
     recompress = bool(settings.get("optimizerRecompress", True))
     include_yft = bool(settings.get("optimizerIncludeYft", False))
+    include_ydd = bool(settings.get("optimizerIncludeYdd", False))
     conv = converter_mod.find()
-    progress("Scanning for .ytd files..." if not include_yft else "Scanning for .ytd and .yft files...")
-    files = scan_ytd_files(folder, include_yft)
+    kinds = ".ytd" + (" and .yft" if include_yft else "") + (" and .ydd" if include_ydd else "")
+    progress(f"Scanning for {kinds} files...")
+    files = scan_ytd_files(folder, include_yft, include_ydd)
     if not files:
         return {"status": "no_files", "message": "No .ytd files found in this folder", "files": [], "total_files": 0,
                 "optimizable_files": 0, "total_size": 0, "estimated_savings": 0, "target_resolution": target,
@@ -221,14 +228,14 @@ def backup_file(abs_path, rel_path, backup_dir):
 
 
 def optimize_file(abs_path, target, skip, conv, recompress=True):
-    """Shrink one .ytd, or the embedded textures of one .yft, in place. Returns (memory_before, memory_after, report)."""
+    """Shrink one .ytd, or the embedded textures of one .yft or .ydd, in place. Returns (memory_before, memory_after, report)."""
     r = rsc7.read(abs_path)
     d = load_dictionary(abs_path, r, r.physical)
     report = ytd.shrink(d, target, skip=skip, converter=conv, recompress=recompress)
     if report["resized"] == 0:
         return r.physical_size, r.physical_size, report
     virtual, physical, pflags = ytd.serialize(d)
-    pflags |= r.physical_flags & rsc7.VERSION_BITS   # keep the resource version nibble (0 for a .ytd, 2 for a .yft)
+    pflags |= r.physical_flags & rsc7.VERSION_BITS   # keep the resource version nibble (0 for a .ytd, 2 for a .yft, 5 for a .ydd)
     tmp = abs_path + ".fivem-optimizer.tmp"
     rsc7.write(tmp, r.version, virtual, physical, virtual_flags=r.virtual_flags, physical_flags=pflags)
     check = rsc7.read(tmp)
