@@ -120,6 +120,41 @@ nothing that depends on the name changes, then restart.
 Verified on a live server: a Gabz audio pack went from 84 registrations per type to 1, an engine-swap
 library from 182 to 1, and the cars that had gone silent got their sound back.
 
+## Server tool: texswap
+
+Most vehicle and map re-skins ship a PNG and an install guide that says: open the archive in OpenIV,
+find the model's `.ytd`, right-click one texture, replace, save. That needs Windows, a copy of the game,
+and a hand on the mouse. `texswap` does the same swap on the server:
+
+    python3 /opt/fivem/tools/ytdshrink/texswap.py <file.ytd> --list
+    python3 /opt/fivem/tools/ytdshrink/texswap.py <file.ytd> --texture NAME --image skin.png
+    python3 /opt/fivem/tools/ytdshrink/texswap.py <file.ytd> --texture NAME --image skin.png --apply --backup DIR
+
+`--list` prints every texture in the dictionary with its size, format and mip count, which is how you find
+the name the mod's guide refers to. Without `--apply` nothing is written: you get the target's shape and
+what the encoded replacement came out as.
+
+The replacement is held to the texture it replaces: same width, same height, same block format, same number
+of mip levels. The image is encoded to that exact shape through ImageMagick or texconv, and a result that
+does not match is refused rather than written, because a texture whose mip chain is the wrong length is a
+client crash, not a visual bug. On `--apply` the original is copied to `--backup` first (or to
+`<file>.bak-texswap` beside it), the file is rewritten, then re-read and compared texture by texture:
+every name in the same order, the target's shape unchanged, its pixels equal to what was encoded, and every
+other texture's pixels untouched. Any mismatch leaves the original in place.
+
+Only `.ytd` files are handled. Textures embedded in a model (`.yft`, `.ydd`) are read by the shrinker but are
+not swapped here; their physical segment can hold model data as well, so a rewrite needs the same guard
+`ytdshrink` applies before it will touch one.
+
+Worked example, a tram livery whose guide called for three OpenIV replacements:
+
+    texswap.py elrtcab.ytd       --texture elrtcab_sign_1       --image cab/tempcab.png    --apply
+    texswap.py elrtmiddle.ytd    --texture elrtmiddle_sign_1    --image mid/tempmiddle.png --apply
+    texswap.py elrtpassenger.ytd --texture elrtpassenger_sign_1 --image Pass/temppass.png  --apply
+
+All three targets were 4096x4096 DXT5 with 11 mip levels; the liveried cars streamed correctly on a live
+server with no client errors.
+
 ## Desktop app (Windows)
 
 Download the installer from Releases. Python and texconv are bundled.
@@ -158,6 +193,7 @@ and the command-line tool.
       converter.py          ImageMagick / texconv driver
       optimize_textures.py  plan + execute (used by the app and by ytdshrink)
       ytdshrink.py          command-line tool
+      texswap.py            replace one named texture in a .ytd (the OpenIV swap, on the server)
       relmerge.py           audio .rel container parse / merge / write
       audiomerge.py         fold an audio resource into one registration per data type
       analyze.py            folder scan for the app
